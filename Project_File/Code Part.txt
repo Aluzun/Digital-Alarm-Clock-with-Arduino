@@ -1,0 +1,509 @@
+#define but1 10
+#define but2 9
+#define but3 8
+#define but4 7
+#define buzzerPin 6
+#define CalcTime 20 //to speead up the clock for presentation (default value is 1)
+#include <LiquidCrystal.h>
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+int buttonState[13] = {0};    
+int lastButtonState [13] = {0};   
+int startPressed [13] = {0};    
+int endPressed [13] = {0};       
+int holdTime [13] = {0};         
+int idleTime [13] = {0};          
+int lastCallLoc = 0;
+
+
+
+boolean twentyfour = false; 
+boolean celcius = false;
+
+int hour = 12;
+int minute = 59;
+int sec = 0;
+
+int H_alarm = 13;
+int MinAlarm = 00 ;
+boolean alarm = false;
+
+boolean alarmflag = false;   
+
+int Hour_snooze = 00;
+int Mnt_snooze = 00 ;
+int Sec_snooze = 00 ;
+
+boolean Hour_setup;
+boolean Min_setup;
+
+
+void setup() {
+
+  pinMode(but1, INPUT);
+  pinMode(but2, INPUT);
+  pinMode(but3, INPUT);
+  pinMode(but4, INPUT);
+  pinMode(buzzerPin, OUTPUT);
+
+  cli();
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1  = 0;
+  OCR1A = 15624;
+  TCCR1B |= (1 << WGM12);
+  TCCR1B |= (1 << CS12) | (1 << CS10);
+  TIMSK1 |= (1 << OCIE1A);
+  sei();
+
+  Serial.begin(9600);
+  lcd.begin(16, 2);
+
+}
+
+
+
+
+ISR(TIMER1_COMPA_vect) {
+  sec = sec + CalcTime;
+  if (sec == 60) {
+    sec = 0;
+    minute++;
+    if (minute == 60) {
+      hour++;
+      minute = 0;
+      if (hour == 24) {
+        hour = 0;
+
+      }
+    }
+  }
+  if (alarm && hour == H_alarm && minute == MinAlarm && sec == 0 && !alarmflag) {
+    digitalWrite(buzzerPin, HIGH);
+    alarmflag = true;
+  }
+  if (hour == Hour_snooze && minute == Mnt_snooze) {
+    digitalWrite(buzzerPin, HIGH);
+    alarmflag = true;
+  }
+}
+
+
+
+
+void loop() {
+  lcdShow(0);
+  CheckButton(0);
+}
+
+void lcdShow (int scene) {
+  String StringAlarm;
+  switch (scene) {
+    case 0:
+      
+      lcd.setCursor(9, 0);
+      lcd.print(getTime(hour,minute));
+
+      lcd.setCursor(0, 0);
+      lcd.print(getTemp());
+
+      if (alarm) {
+        StringAlarm = "Alarm    " + getTime(H_alarm, MinAlarm);
+      }
+      else {
+         StringAlarm ="Alarm   Disabled     ";
+      }
+      lcd.setCursor(0, 1);
+      lcd.print(StringAlarm);
+      break;
+    case 1:
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Clock Set Up");
+      break;
+    case 2:
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Set up an Alarm");
+      break;
+     case 3:
+      lcd.clear();
+      
+      lcd.setCursor(0, 0);
+      lcd.print("Saving");
+      for (int a = 6; a < 8; a++) {
+              lcd.setCursor(a, 0);
+          lcd.print(".");
+          delay(500);
+        }
+      lcd.clear();
+	  break;
+    case 4:
+      	lcd.clear();
+    	lcd.setCursor(0, 0);
+    	
+    	lcd.print("Alarm snoozed ");
+
+    	
+    	lcd.setCursor(0, 1);
+    	lcd.print("for 5 minutes.");
+    	delay(3000);
+    	lcd.clear();
+      break;
+    default:
+     
+      break;
+  }
+}
+
+
+String getTime(int hour,int minute) {
+
+
+
+  if (twentyfour) {
+    String hour_s = String(hour);
+    String min_s = String(minute);
+    if (minute < 10) {
+      min_s = "0" + min_s;
+    }
+    if (hour < 10) {
+      hour_s = "0" + hour_s;
+    }
+    String time = hour_s + ":" + min_s+"  ";
+
+    return time;
+  }
+
+
+  else {
+    if (hour <= 12) {
+      String hour_s = String(hour);
+      String min_s = String(minute);
+      if (minute < 10) {
+        min_s = "0" + min_s;
+      }
+      if (hour < 10) {
+        hour_s = "0" + hour_s;
+      }
+      String time = hour_s + ":" + min_s + "AM";
+
+      return time;
+    }
+
+    else {
+      int c_hour = hour - 12;
+
+      String hour_s = String(c_hour);
+      String min_s = String(minute);
+      if (minute < 10) {
+        min_s = "0" + min_s;
+      }
+      if (c_hour < 10) {
+        hour_s = "0" + hour_s;
+      }
+
+      String time = hour_s + ":" + min_s + "PM";
+
+      return time;
+    }
+
+  }
+}
+
+
+
+
+String getTemp() {
+  
+  String a = "";
+  int temp = analogRead(A0);
+  float voltage = ((temp * 5.0) / 1024) * 1000;
+  float pinC_temp =  (voltage - 500) / 10 ;
+  if (celcius) {
+    String a = String((int)pinC_temp);
+    return "" + a + " C";
+  }
+
+  else {
+    float pinF_temp = (((pinC_temp * 9) / 5) + 32);
+    String a = String((int)pinF_temp);
+    return "" + a + " F";
+  }
+}
+
+
+
+void CheckButton(int a) {
+  if (!(lastCallLoc == a)){
+    for (int j = 0; j < sizeof(lastButtonState); j++) {
+        lastButtonState[j] =0 ;  
+    }
+    lastCallLoc = a;
+  }
+  else{ lastCallLoc = a;
+      }
+  for (int ID = 7; ID < 11; ID++) {
+    buttonState[ID] = digitalRead(ID); 
+  
+
+    if (buttonState[ID] != lastButtonState[ID]) { 
+      if (buttonState[ID] == HIGH) {
+        startPressed[ID] = millis();
+
+
+      } else {
+        endPressed[ID] = millis();
+        holdTime[ID] = endPressed[ID] - startPressed[ID];
+
+        if (holdTime[ID] >= 1000 && a == 0) {
+          switch (ID) {
+            case 10:
+              Serial.println("Clock Setup");
+              setupClock();
+              break;
+            case 9:
+              Serial.println("Alarm Setup");
+              setupAlarm();
+              break;
+            default:
+              
+              break;
+          }
+        }
+        else if (a == 0) {
+         
+          switch (ID) {
+            case 10:
+              Serial.println("Switching between modes in current time");
+              twentyfour = !twentyfour;
+              break;
+            case 9:
+              Serial.println("Setting the alarm ON and OFF");
+            if (alarmflag) {digitalWrite(buzzerPin, LOW);alarmflag = false;}
+              alarm = !alarm;
+              alarmflag = false;
+              break;
+            case 8:
+              Serial.println("Switching between temperature scales");
+              celcius = !celcius;
+              break;
+            case 7:
+              Serial.println("Snooze button");
+              snooze();
+              break;
+            default:
+             
+              break;
+          }
+        }
+        else if (a == 1 || a == 3) {
+         
+          switch (ID) {
+            case 10:
+              if(a == 1){
+              Hour_setup = false;
+              }
+
+              break;
+            case 9:
+               if(a == 3){
+              Hour_setup = false;
+              }
+
+              break;
+            case 8:
+                if(a == 1){
+              hour++;
+              if (hour == 60) {
+                hour = 0;
+              }}
+              else{
+                H_alarm++;
+              if (H_alarm == 60) {
+                H_alarm = 0;
+              }
+              }
+              break;
+            case 7:
+
+              break;
+            default:
+              
+              break;
+          }
+        }
+
+        else if (a == 2 || a == 4) {
+         
+          switch (ID) {
+            case 10:
+              if(a ==2){
+              Min_setup = false;
+              }
+            case 9:
+              if(a ==4){
+              Min_setup = false;
+              }
+
+              break;
+            case 8:
+              if(a ==2){
+              minute++;
+              if (minute == 60) {
+                minute = 0;
+              }}
+              else{
+                MinAlarm++;
+              if (MinAlarm == 60) {
+                MinAlarm = 0;
+              }
+              }
+              
+              break;
+            default:
+              
+              break;
+          }
+        }
+
+      }
+    }
+    lastButtonState[ID] = buttonState[ID];
+             
+
+  }
+}
+void snooze() {
+  if (alarmflag) {
+    digitalWrite(buzzerPin, LOW);
+    Hour_snooze = hour;
+    Mnt_snooze = minute + 5;
+    Sec_snooze = 30;
+    
+    alarmflag = false;
+    if (Mnt_snooze >= 60) {
+      Mnt_snooze = Mnt_snooze - 60;
+      Hour_snooze++;
+      if (Hour_snooze == 24) {
+        Hour_snooze = 0;
+      }
+    }
+    lcdShow(4);
+  }
+
+
+}
+
+void setupClock() {
+  lcdShow(1);
+  boolean blinkState = false;
+  unsigned long pMillis = 0;
+  const long interval = 200;
+  Hour_setup = true;
+  Min_setup = true;
+  while (Min_setup) {
+    while (Hour_setup) {
+    
+      CheckButton(1);
+      unsigned long currentMillis = millis();
+
+
+      if (currentMillis - pMillis >= interval) {
+        pMillis = currentMillis;
+        if (blinkState == false) {
+          blinkState = true;
+          lcd.setCursor(1, 1);
+          String line1 = getTime(hour,minute);
+          lcd.print(line1);
+        } else {
+          blinkState = false;
+          lcd.setCursor(1, 1);
+          String line1 = ("  ");
+          lcd.print(line1);
+
+        }
+      }
+    }
+    CheckButton(2);
+    unsigned long currentMillis = millis();
+
+
+    if (currentMillis - pMillis >= interval) {
+      pMillis = currentMillis;
+      if (blinkState == false) {
+        blinkState = true;
+        lcd.setCursor(1, 1);
+        String line1 = getTime(hour,minute);
+        lcd.print(line1);
+      } else {
+        blinkState = false;
+        lcd.setCursor(4, 1);
+        String line1 = ("  ");
+        lcd.print(line1);
+
+
+      }
+    }
+  }
+  lcdShow(3);
+  sec = 0;
+  
+}
+
+void setupAlarm() {
+  lcdShow(2);
+  
+  boolean blinkState = false;
+  unsigned long pMillis = 0;
+  const long interval = 200;
+  Hour_setup = true;
+  Min_setup = true;
+  while (Min_setup) {
+    while (Hour_setup) {
+    
+      CheckButton(3);
+      unsigned long currentMillis = millis();
+
+
+      if (currentMillis - pMillis >= interval) {
+        pMillis = currentMillis;
+        if (blinkState == false) {
+          blinkState = true;
+          lcd.setCursor(1, 1);
+          String line1 = getTime(H_alarm,MinAlarm);
+          lcd.print(line1);
+        } else {
+          blinkState = false;
+          lcd.setCursor(1, 1);
+          String line1 = ("  ");
+          lcd.print(line1);
+
+        }
+      }
+    }
+    CheckButton(4);
+    unsigned long currentMillis = millis();
+
+
+    if (currentMillis - pMillis >= interval) {
+      pMillis = currentMillis;
+      if (blinkState == false) {
+        blinkState = true;
+        lcd.setCursor(1, 1);
+        String line1 = getTime(H_alarm,MinAlarm);
+        lcd.print(line1);
+      } else {
+        blinkState = false;
+        lcd.setCursor(4, 1);
+        String line1 = ("  ");
+        lcd.print(line1);
+
+
+      }
+    }
+  }
+lcdShow(3);
+  
+}  
+
